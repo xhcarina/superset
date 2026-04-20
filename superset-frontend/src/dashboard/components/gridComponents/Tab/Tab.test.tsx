@@ -18,15 +18,23 @@
  */
 
 import {
+  act,
+  createStore,
   fireEvent,
   render,
   screen,
   waitFor,
   userEvent,
 } from 'spec/helpers/testing-library';
+import reducerIndex from 'spec/helpers/reducerIndex';
+import getChartIdsFromComponent from 'src/dashboard/util/getChartIdsFromComponent';
 import DashboardComponent from 'src/dashboard/containers/DashboardComponent';
 import { EditableTitle } from '@superset-ui/core/components';
 import { setEditMode, onRefresh } from 'src/dashboard/actions/dashboardState';
+import {
+  useIsAutoRefreshing,
+  useIsRefreshInFlight,
+} from 'src/dashboard/contexts/AutoRefreshContext';
 
 import type { FC } from 'react';
 import ActualTab from './Tab';
@@ -38,6 +46,17 @@ const Tab = ActualTab as unknown as FC<Record<string, unknown>>;
 jest.mock('src/dashboard/util/getChartIdsFromComponent', () =>
   jest.fn(() => []),
 );
+
+jest.mock('src/dashboard/contexts/AutoRefreshContext', () => {
+  const actual = jest.requireActual(
+    'src/dashboard/contexts/AutoRefreshContext',
+  );
+  return {
+    ...actual,
+    useIsAutoRefreshing: jest.fn(() => false),
+    useIsRefreshInFlight: jest.fn(() => false),
+  };
+});
 
 jest.mock('src/dashboard/containers/DashboardComponent', () =>
   jest.fn(() => <div data-test="DashboardComponent" />),
@@ -94,6 +113,7 @@ jest.mock('src/dashboard/components/dnd/DragDroppable', () => ({
   }),
 }));
 jest.mock('src/dashboard/actions/dashboardState', () => ({
+  ...jest.requireActual('src/dashboard/actions/dashboardState'),
   setEditMode: jest.fn(() => ({
     type: 'SET_EDIT_MODE',
   })),
@@ -146,6 +166,8 @@ const createProps = () => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  (useIsAutoRefreshing as jest.Mock).mockReturnValue(false);
+  (useIsRefreshInFlight as jest.Mock).mockReturnValue(false);
 });
 
 test('Render tab (no content)', () => {
@@ -760,4 +782,114 @@ test('Should use isLazyLoad flag for tab refreshes', async () => {
     false, // skipFiltersRefresh
     true, // isLazyLoad should be true to prevent infinite loops
   );
+});
+
+test('A subsequent dashboard refresh with a new lastRefreshTime triggers exactly one additional lazy refresh', async () => {
+  jest.clearAllMocks();
+  (getChartIdsFromComponent as jest.Mock).mockReset();
+  (getChartIdsFromComponent as jest.Mock).mockReturnValue([501]);
+
+  const props = createProps();
+  props.renderType = 'RENDER_TAB_CONTENT';
+  props.isComponentVisible = true;
+
+  const baseTime = Date.now();
+  const store = createStore(
+    {
+      dashboardState: {
+        lastRefreshTime: baseTime - 2000,
+        tabActivationTimes: { 'TAB-YT6eNksV-': baseTime - 5000 },
+      },
+      dashboardInfo: { id: 23, dash_edit_perm: true },
+    },
+    reducerIndex,
+  );
+
+  const { rerender } = render(<Tab {...props} />, {
+    useDnd: true,
+    store,
+  });
+
+  await waitFor(
+    () => {
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    },
+    { timeout: 500 },
+  );
+
+  // Second dashboard refresh advances lastRefreshTime via the reducer
+  act(() => {
+    store.dispatch({ type: 'ON_REFRESH' });
+  });
+  rerender(<Tab {...props} />);
+
+  await waitFor(
+    () => {
+      expect(onRefresh).toHaveBeenCalledTimes(2);
+    },
+    { timeout: 1000 },
+  );
+
+  // Further re-renders without a new refresh should NOT trigger more dispatches
+  for (let i = 0; i < 3; i += 1) {
+    rerender(<Tab {...props} />);
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  expect(onRefresh).toHaveBeenCalledTimes(2);
+});
+
+test('Does not dispatch lazy refresh while a dashboard refresh is in flight', async () => {
+  jest.clearAllMocks();
+  (getChartIdsFromComponent as jest.Mock).mockReset();
+  (getChartIdsFromComponent as jest.Mock).mockReturnValue([601]);
+
+  (useIsRefreshInFlight as jest.Mock).mockReturnValue(true);
+
+  const props = createProps();
+  props.renderType = 'RENDER_TAB_CONTENT';
+  props.isComponentVisible = true;
+
+  render(<Tab {...props} />, {
+    useRedux: true,
+    useDnd: true,
+    initialState: {
+      dashboardState: {
+        lastRefreshTime: Date.now() - 1000,
+        tabActivationTimes: { 'TAB-YT6eNksV-': Date.now() - 5000 },
+      },
+      dashboardInfo: { id: 23, dash_edit_perm: true },
+    },
+  });
+
+  // Wait past the CHART_MOUNT_DELAY to ensure no dispatch occurs
+  await new Promise(resolve => setTimeout(resolve, 300));
+  expect(onRefresh).not.toHaveBeenCalled();
+});
+
+test('Does not dispatch lazy refresh while an auto-refresh cycle is active', async () => {
+  jest.clearAllMocks();
+  (getChartIdsFromComponent as jest.Mock).mockReset();
+  (getChartIdsFromComponent as jest.Mock).mockReturnValue([701]);
+
+  (useIsAutoRefreshing as jest.Mock).mockReturnValue(true);
+
+  const props = createProps();
+  props.renderType = 'RENDER_TAB_CONTENT';
+  props.isComponentVisible = true;
+
+  render(<Tab {...props} />, {
+    useRedux: true,
+    useDnd: true,
+    initialState: {
+      dashboardState: {
+        lastRefreshTime: Date.now() - 1000,
+        tabActivationTimes: { 'TAB-YT6eNksV-': Date.now() - 5000 },
+      },
+      dashboardInfo: { id: 23, dash_edit_perm: true },
+    },
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 300));
+  expect(onRefresh).not.toHaveBeenCalled();
 });

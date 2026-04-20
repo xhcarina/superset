@@ -187,18 +187,20 @@ const Tab = (props: TabProps): ReactElement => {
           const chartIds = getChartIdsFromComponent(props.id, dashboardLayout);
           if (chartIds.length > 0) {
             if (isAutoRefreshing || isRefreshInFlight) {
-              return;
+              return undefined;
             }
             // Use lazy load flags to avoid updating global refresh time and filters
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
               dispatch(
                 onRefresh(chartIds, true, 0, dashboardInfo.id, false, true),
               );
             }, CHART_MOUNT_DELAY);
+            return () => clearTimeout(timeoutId);
           }
         }
       }
     }
+    return undefined;
   }, [
     props.isComponentVisible,
     props.renderType,

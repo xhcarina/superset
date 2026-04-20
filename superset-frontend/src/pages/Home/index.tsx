@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { t } from '@apache-superset/core/translation';
 import {
   isFeatureEnabled,
@@ -208,41 +208,50 @@ function Welcome({ user, addDangerToast }: WelcomeProps) {
     ];
   }, []);
 
-  useEffect(() => {
-    if (!otherTabFilters || WelcomeMainExtension) {
-      return;
-    }
-    const activeTab = getItem(LocalStorageKeys.HomepageActivityFilter, null);
-    setActiveState(collapseState.length > 0 ? collapseState : DEFAULT_TAB_ARR);
-    getRecentActivityObjs(user.userId!, recent, addDangerToast, otherTabFilters)
-      .then(res => {
-        const data: ActivityData | null = {};
-        data[TableTab.Other] = res.other;
-        if (res.viewed) {
-          const filtered = reject(res.viewed, ['item_url', null]).map(r => r);
-          data[TableTab.Viewed] = filtered;
-          if (!activeTab && data[TableTab.Viewed]) {
-            setActiveChild(TableTab.Viewed);
-          } else if (!activeTab && !data[TableTab.Viewed]) {
-            setActiveChild(TableTab.Created);
-          } else setActiveChild(activeTab || TableTab.Created);
-        } else if (!activeTab) setActiveChild(TableTab.Created);
-        else setActiveChild(activeTab);
-        setActivityData(activityData => ({ ...activityData, ...data }));
-      })
-      .catch(
-        createErrorHandler((errMsg: unknown) => {
-          setActivityData(activityData => ({
-            ...activityData,
-            [TableTab.Viewed]: [],
-          }));
-          addDangerToast(
-            t('There was an issue fetching your recent activity: %s', errMsg),
-          );
-        }),
-      );
+  const loadRecentActivity = useCallback(
+    (updateActiveChild = true) => {
+      const activeTab = getItem(LocalStorageKeys.HomepageActivityFilter, null);
+      return getRecentActivityObjs(
+        user.userId!,
+        recent,
+        addDangerToast,
+        otherTabFilters,
+      )
+        .then(res => {
+          const data: ActivityData | null = {};
+          data[TableTab.Other] = res.other;
+          if (res.viewed) {
+            const filtered = reject(res.viewed, ['item_url', null]).map(r => r);
+            data[TableTab.Viewed] = filtered;
+            if (updateActiveChild) {
+              if (!activeTab && data[TableTab.Viewed]) {
+                setActiveChild(TableTab.Viewed);
+              } else if (!activeTab && !data[TableTab.Viewed]) {
+                setActiveChild(TableTab.Created);
+              } else setActiveChild(activeTab || TableTab.Created);
+            }
+          } else if (updateActiveChild) {
+            if (!activeTab) setActiveChild(TableTab.Created);
+            else setActiveChild(activeTab);
+          }
+          setActivityData(activityData => ({ ...activityData, ...data }));
+        })
+        .catch(
+          createErrorHandler((errMsg: unknown) => {
+            setActivityData(activityData => ({
+              ...activityData,
+              [TableTab.Viewed]: [],
+            }));
+            addDangerToast(
+              t('There was an issue fetching your recent activity: %s', errMsg),
+            );
+          }),
+        );
+    },
+    [user.userId, recent, addDangerToast, otherTabFilters],
+  );
 
-    // Sets other activity data in parallel with recents api call
+  const loadOwnedObjects = useCallback(() => {
     const ownSavedQueryFilters = [
       {
         col: 'created_by',
@@ -250,7 +259,7 @@ function Welcome({ user, addDangerToast }: WelcomeProps) {
         value: `${id}`,
       },
     ];
-    Promise.all([
+    return Promise.all([
       getUserOwnedObjects(id, 'dashboard')
         .then(r => {
           setDashboardData(r);
@@ -287,7 +296,26 @@ function Welcome({ user, addDangerToast }: WelcomeProps) {
               return Promise.resolve();
             })
         : Promise.resolve(),
-    ]).then(() => {
+    ]);
+  }, [id, addDangerToast, canReadSavedQueries]);
+
+  const refreshRecentActivity = useCallback(() => {
+    // Keep the currently selected sub-tab (Viewed/Created/Edited) and
+    // re-fetch the data that powers the Recents section so deletions made
+    // from the Dashboards/Charts panels are reflected immediately.
+    loadRecentActivity(false);
+    loadOwnedObjects();
+  }, [loadRecentActivity, loadOwnedObjects]);
+
+  useEffect(() => {
+    if (!otherTabFilters || WelcomeMainExtension) {
+      return;
+    }
+    setActiveState(collapseState.length > 0 ? collapseState : DEFAULT_TAB_ARR);
+    loadRecentActivity();
+
+    // Sets other activity data in parallel with recents api call
+    loadOwnedObjects().then(() => {
       setIsFetchingActivityData(false);
     });
   }, [otherTabFilters]);
@@ -394,6 +422,7 @@ function Welcome({ user, addDangerToast }: WelcomeProps) {
                         otherTabData={activityData?.[TableTab.Other]}
                         otherTabFilters={otherTabFilters}
                         otherTabTitle={otherTabTitle}
+                        onDelete={refreshRecentActivity}
                       />
                     ),
                 },
@@ -411,6 +440,7 @@ function Welcome({ user, addDangerToast }: WelcomeProps) {
                         otherTabData={activityData?.[TableTab.Other]}
                         otherTabFilters={otherTabFilters}
                         otherTabTitle={otherTabTitle}
+                        onDelete={refreshRecentActivity}
                       />
                     ),
                 },

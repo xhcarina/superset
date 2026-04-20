@@ -403,6 +403,62 @@ test('handles dashboard deletion confirmation', async () => {
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
+test('invokes onDelete after successful dashboard deletion', async () => {
+  const onDeleteMock = jest.fn();
+
+  jest.spyOn(hooks, 'useListViewResource').mockImplementation(() => ({
+    state: {
+      loading: false,
+      resourceCollection: mockDashboards,
+      resourceCount: mockDashboards.length,
+      bulkSelectEnabled: false,
+      lastFetched: new Date().toISOString(),
+    },
+    setResourceCollection: jest.fn(),
+    hasPerm: jest.fn().mockReturnValue(true),
+    refreshData: jest.fn(),
+    fetchData: jest.fn(),
+    toggleBulkSelect: jest.fn(),
+  }));
+
+  render(
+    <Router history={history}>
+      <DashboardTable
+        {...defaultProps}
+        mine={mockDashboards}
+        onDelete={onDeleteMock}
+      />
+    </Router>,
+    { store },
+  );
+
+  const moreOptionsButton = screen.getAllByLabelText('more')[0];
+  await userEvent.click(moreOptionsButton);
+
+  await waitFor(() => {
+    expect(screen.getByText('Delete')).toBeInTheDocument();
+  });
+
+  await userEvent.click(screen.getByText('Delete'));
+
+  const deleteInput = screen.getByTestId('delete-modal-input');
+  await userEvent.type(deleteInput, 'DELETE');
+
+  const confirmDeleteButton = screen.getByTestId('modal-confirm-button');
+  await waitFor(() => {
+    expect(confirmDeleteButton).toBeEnabled();
+  });
+
+  await userEvent.click(confirmDeleteButton);
+
+  await waitFor(
+    () => {
+      expect(onDeleteMock).toHaveBeenCalledTimes(1);
+    },
+    { timeout: 3000 },
+  );
+});
+
 test('passes correct parameters to handleDashboardDelete for Other tab', async () => {
   const mockHandleDashboardDelete =
     require('src/views/CRUD/utils').handleDashboardDelete;

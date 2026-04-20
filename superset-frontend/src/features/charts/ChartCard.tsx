@@ -32,6 +32,7 @@ import {
 } from '@superset-ui/core/components';
 import Chart from 'src/types/Chart';
 import { FacePile } from 'src/components';
+import { TableTab } from 'src/views/CRUD/types';
 import { handleChartDelete, CardStyles } from 'src/views/CRUD/utils';
 import { assetUrl } from 'src/utils/assetUrl';
 
@@ -50,6 +51,7 @@ interface ChartCardProps {
   userId?: string | number;
   showThumbnails?: boolean;
   handleBulkChartExport: (chartsToExport: Chart[]) => void;
+  getData?: (tab: TableTab) => void;
 }
 
 export default function ChartCard({
@@ -67,6 +69,7 @@ export default function ChartCard({
   chartFilter,
   userId,
   handleBulkChartExport,
+  getData,
 }: ChartCardProps) {
   const history = useHistory();
   const canEdit = hasPerm('can_write');
@@ -136,6 +139,7 @@ export default function ChartCard({
               refreshData,
               chartFilter,
               userId,
+              getData,
             )
           }
         >

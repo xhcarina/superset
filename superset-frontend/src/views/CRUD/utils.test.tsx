@@ -17,6 +17,7 @@
  * under the License.
  */
 import rison from 'rison';
+import { SupersetClient } from '@superset-ui/core';
 import {
   checkUploadExtensions,
   getAlreadyExists,
@@ -26,6 +27,7 @@ import {
   getSSHPasswordsNeeded,
   getSSHPrivateKeysNeeded,
   getSSHPrivateKeyPasswordsNeeded,
+  handleChartDelete,
   hasTerminalValidation,
   isAlreadyExists,
   isNeedsEncryptedExtraField,
@@ -34,6 +36,7 @@ import {
   isNeedsSSHPrivateKey,
   isNeedsSSHPrivateKeyPassword,
 } from 'src/views/CRUD/utils';
+import Chart from 'src/types/Chart';
 import { User } from 'src/types/bootstrapTypes';
 import { WelcomeTable } from 'src/features/home/types';
 import { Filter, TableTab } from './types';
@@ -709,5 +712,104 @@ test('getFilterValues', () => {
     expect(getFilterValues(tab, welcomeTable, user, otherTabFilters)).toEqual(
       expectedValue,
     );
+  });
+});
+
+describe('handleChartDelete', () => {
+  const chart = { id: 42, slice_name: 'Cool chart' } as Chart;
+  const addSuccessToast = jest.fn();
+  const addDangerToast = jest.fn();
+  let deleteSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    deleteSpy = jest
+      .spyOn(SupersetClient, 'delete')
+      .mockResolvedValue({} as never);
+  });
+
+  afterEach(() => {
+    deleteSpy.mockRestore();
+  });
+
+  test('on Mine tab, calls refreshData with created_by filter', async () => {
+    const refreshData = jest.fn();
+    const getData = jest.fn();
+    await handleChartDelete(
+      chart,
+      addSuccessToast,
+      addDangerToast,
+      refreshData,
+      TableTab.Mine,
+      1,
+      getData,
+    );
+    expect(getData).not.toHaveBeenCalled();
+    expect(refreshData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: [{ id: 'created_by', operator: 'rel_o_m', value: '1' }],
+      }),
+    );
+    expect(addSuccessToast).toHaveBeenCalledWith('Deleted: Cool chart');
+  });
+
+  test('on Other tab with getData, calls getData(Other) instead of refreshData', async () => {
+    const refreshData = jest.fn();
+    const getData = jest.fn();
+    await handleChartDelete(
+      chart,
+      addSuccessToast,
+      addDangerToast,
+      refreshData,
+      TableTab.Other,
+      1,
+      getData,
+    );
+    expect(getData).toHaveBeenCalledWith(TableTab.Other);
+    expect(refreshData).not.toHaveBeenCalled();
+    expect(addSuccessToast).toHaveBeenCalledWith('Deleted: Cool chart');
+  });
+
+  test('on Other tab without getData, falls back to refreshData()', async () => {
+    const refreshData = jest.fn();
+    await handleChartDelete(
+      chart,
+      addSuccessToast,
+      addDangerToast,
+      refreshData,
+      TableTab.Other,
+      1,
+    );
+    expect(refreshData).toHaveBeenCalledWith();
+    expect(addSuccessToast).toHaveBeenCalledWith('Deleted: Cool chart');
+  });
+
+  test('no chartFilter defaults to refreshData()', async () => {
+    const refreshData = jest.fn();
+    await handleChartDelete(
+      chart,
+      addSuccessToast,
+      addDangerToast,
+      refreshData,
+    );
+    expect(refreshData).toHaveBeenCalledWith();
+  });
+
+  test('on delete failure, shows danger toast', async () => {
+    deleteSpy.mockRejectedValueOnce(new Error('boom'));
+    const refreshData = jest.fn();
+    await handleChartDelete(
+      chart,
+      addSuccessToast,
+      addDangerToast,
+      refreshData,
+      TableTab.Other,
+      1,
+      jest.fn(),
+    );
+    expect(addDangerToast).toHaveBeenCalledWith(
+      'There was an issue deleting: Cool chart',
+    );
+    expect(refreshData).not.toHaveBeenCalled();
   });
 });

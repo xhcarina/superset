@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { t } from '@apache-superset/core/translation';
 import {
   useChartEditModal,
@@ -59,6 +59,7 @@ interface ChartTableProps {
   otherTabData?: Array<object>;
   otherTabFilters: Filter[];
   otherTabTitle: string;
+  onDelete?: () => void;
 }
 
 function ChartTable({
@@ -70,6 +71,7 @@ function ChartTable({
   otherTabData,
   otherTabFilters,
   otherTabTitle,
+  onDelete,
 }: ChartTableProps) {
   const history = useHistory();
   const initialTab = getItem(
@@ -83,7 +85,7 @@ function ChartTable({
     state: { loading, resourceCollection: charts, bulkSelectEnabled },
     setResourceCollection: setCharts,
     hasPerm,
-    refreshData,
+    refreshData: refreshChartData,
     fetchData,
   } = useListViewResource<Chart>(
     'chart',
@@ -111,6 +113,15 @@ function ChartTable({
   const [activeTab, setActiveTab] = useState(initialTab);
   const [preparingExport, setPreparingExport] = useState<boolean>(false);
   const [loaded, setLoaded] = useState<boolean>(false);
+
+  const refreshData = useCallback(
+    (config?: Parameters<typeof refreshChartData>[0]) => {
+      const result = refreshChartData(config);
+      onDelete?.();
+      return result;
+    },
+    [refreshChartData, onDelete],
+  );
 
   const getData = (tab: TableTab) =>
     fetchData({

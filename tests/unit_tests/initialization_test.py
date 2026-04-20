@@ -257,3 +257,36 @@ class TestCreateAppRoot:
 
         assert isinstance(app.wsgi_app, AppRootMiddleware)
         assert app.wsgi_app.app_root == "/from-param"
+
+    @patch("superset.initialization.SupersetAppInitializer.init_app")
+    def test_app_root_does_not_mutate_logo_paths(self, mock_init_app):
+        """Subdirectory deploys must not pre-prefix APP_ICON or theme tokens.
+
+        The frontend already prefixes static asset paths via
+        `ensureStaticPrefix()` (using STATIC_ASSETS_PREFIX) and navigation
+        URLs via `ensureAppRoot()` (using APPLICATION_ROOT). Mutating these
+        config values in `create_app` results in a double prefix at render
+        time (e.g. ``/dashboards/dashboards/static/...``).
+        """
+        env = os.environ.copy()
+        env.pop("SUPERSET_CONFIG", None)
+        env["SUPERSET_APP_ROOT"] = "/dashboards"
+        with patch.dict(os.environ, env, clear=True):
+            app = create_app()
+
+        # Middleware is installed and prefixes are set so the frontend
+        # helpers can do their job.
+        assert isinstance(app.wsgi_app, AppRootMiddleware)
+        assert app.wsgi_app.app_root == "/dashboards"
+        assert app.config["STATIC_ASSETS_PREFIX"] == "/dashboards"
+        assert app.config["APPLICATION_ROOT"] == "/dashboards"
+
+        # APP_ICON and theme brand tokens stay at their unprefixed defaults;
+        # the frontend will prefix them at render time.
+        assert app.config["APP_ICON"] == "/static/assets/images/superset-logo-horiz.png"
+        for theme_key in ("THEME_DEFAULT", "THEME_DARK"):
+            token = app.config[theme_key]["token"]
+            assert token["brandLogoUrl"] == (
+                "/static/assets/images/superset-logo-horiz.png"
+            )
+            assert token["brandLogoHref"] == "/"

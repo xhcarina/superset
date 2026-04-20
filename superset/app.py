@@ -68,25 +68,14 @@ def create_app(
         if app_root != "/":
             app.wsgi_app = AppRootMiddleware(app.wsgi_app, app_root)
             # If not set, manually configure options that depend on the
-            # value of app_root so things work out of the box
+            # value of app_root so things work out of the box. The frontend
+            # helpers `ensureStaticPrefix()` (in src/utils/assetUrl.ts) and
+            # `ensureAppRoot()` (in src/utils/pathUtils.ts) prepend
+            # STATIC_ASSETS_PREFIX / APPLICATION_ROOT to relative paths, so
+            # APP_ICON, brandLogoUrl, and brandLogoHref must NOT be mutated
+            # here — doing so would result in a double prefix at render time.
             if not app.config["STATIC_ASSETS_PREFIX"]:
                 app.config["STATIC_ASSETS_PREFIX"] = app_root
-            # Prefix APP_ICON path with subdirectory root for subdirectory deployments
-            if (
-                app.config.get("APP_ICON", "").startswith("/static/")
-                and app_root != "/"
-            ):
-                app.config["APP_ICON"] = f"{app_root}{app.config['APP_ICON']}"
-                # Also update theme tokens for subdirectory deployments
-                for theme_key in ("THEME_DEFAULT", "THEME_DARK"):
-                    theme = app.config[theme_key]
-                    token = theme.get("token", {})
-                    # Update brandLogoUrl if it points to /static/
-                    if token.get("brandLogoUrl", "").startswith("/static/"):
-                        token["brandLogoUrl"] = f"{app_root}{token['brandLogoUrl']}"
-                    # Update brandLogoHref if it's the default "/"
-                    if token.get("brandLogoHref") == "/":
-                        token["brandLogoHref"] = app_root
             if app.config["APPLICATION_ROOT"] == "/":
                 app.config["APPLICATION_ROOT"] = app_root
 

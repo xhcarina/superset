@@ -24,6 +24,7 @@ import {
   EchartsRadarChartProps,
   EchartsRadarFormData,
 } from '../../src/Radar/types';
+import { LegendOrientation } from '../../src/types';
 
 interface RadarIndicator {
   name: string;
@@ -36,6 +37,8 @@ type RadarShape = 'circle' | 'polygon';
 interface RadarChartConfig {
   shape: RadarShape;
   indicator: RadarIndicator[];
+  center?: [number, number];
+  radius?: number;
 }
 
 interface RadarSeriesData {
@@ -200,5 +203,80 @@ describe('legend sorting', () => {
       'Mark sales',
       'Arnold sales',
     ]);
+  });
+});
+
+describe('legend margin', () => {
+  const chartWidth = 800;
+  const chartHeight = 600;
+
+  const buildProps = (overrides: Partial<EchartsRadarFormData> = {}) =>
+    new ChartProps({
+      formData: { ...formData, ...overrides },
+      width: chartWidth,
+      height: chartHeight,
+      queriesData,
+      theme: supersetTheme,
+    });
+
+  test('centers the radar when the legend is hidden', () => {
+    const result = transformProps(
+      buildProps({ showLegend: false }) as EchartsRadarChartProps,
+    );
+    const radar = result.echartOptions.radar as RadarChartConfig;
+
+    expect(radar.center).toEqual([chartWidth / 2, chartHeight / 2]);
+  });
+
+  test('shifts the radar center down when the legend is on top', () => {
+    const result = transformProps(
+      buildProps({
+        showLegend: true,
+        legendOrientation: LegendOrientation.Top,
+        legendMargin: 60,
+      }) as EchartsRadarChartProps,
+    );
+    const radar = result.echartOptions.radar as RadarChartConfig;
+
+    expect(radar.center).toEqual([chartWidth / 2, chartHeight / 2 + 30]);
+  });
+
+  test('shifts the radar center up when the legend is on the bottom', () => {
+    const result = transformProps(
+      buildProps({
+        showLegend: true,
+        legendOrientation: LegendOrientation.Bottom,
+        legendMargin: 60,
+      }) as EchartsRadarChartProps,
+    );
+    const radar = result.echartOptions.radar as RadarChartConfig;
+
+    expect(radar.center).toEqual([chartWidth / 2, chartHeight / 2 - 30]);
+  });
+
+  test('shifts the radar center right when the legend is on the left', () => {
+    const result = transformProps(
+      buildProps({
+        showLegend: true,
+        legendOrientation: LegendOrientation.Left,
+        legendMargin: 60,
+      }) as EchartsRadarChartProps,
+    );
+    const radar = result.echartOptions.radar as RadarChartConfig;
+
+    expect(radar.center).toEqual([chartWidth / 2 + 30, chartHeight / 2]);
+  });
+
+  test('shifts the radar center left when the legend is on the right', () => {
+    const result = transformProps(
+      buildProps({
+        showLegend: true,
+        legendOrientation: LegendOrientation.Right,
+        legendMargin: 60,
+      }) as EchartsRadarChartProps,
+    );
+    const radar = result.echartOptions.radar as RadarChartConfig;
+
+    expect(radar.center).toEqual([chartWidth / 2 - 30, chartHeight / 2]);
   });
 });

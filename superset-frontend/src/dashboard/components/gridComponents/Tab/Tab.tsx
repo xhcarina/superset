@@ -182,15 +182,17 @@ const Tab = (props: TabProps): ReactElement => {
 
         // Only proceed if we haven't already handled this refresh
         if (handledRefreshRef.current !== refreshKey) {
-          handledRefreshRef.current = refreshKey;
-
           const chartIds = getChartIdsFromComponent(props.id, dashboardLayout);
           if (chartIds.length > 0) {
             if (isAutoRefreshing || isRefreshInFlight) {
               return undefined;
             }
-            // Use lazy load flags to avoid updating global refresh time and filters
+            // Use lazy load flags to avoid updating global refresh time and filters.
+            // Claim the refreshKey only after the dispatch actually fires so that
+            // if a dependency changes within CHART_MOUNT_DELAY and the cleanup
+            // cancels this timeout, the subsequent effect run can reschedule it.
             const timeoutId = setTimeout(() => {
+              handledRefreshRef.current = refreshKey;
               dispatch(
                 onRefresh(chartIds, true, 0, dashboardInfo.id, false, true),
               );

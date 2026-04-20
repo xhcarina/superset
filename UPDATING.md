@@ -24,6 +24,25 @@ assists people when migrating to a new version.
 
 ## Next
 
+### Subdirectory deployment: logo and brand URL double-prefix fixed
+
+When deploying Superset under a subdirectory (e.g. `SUPERSET_APP_ROOT=/dashboards`),
+`create_app()` previously prepended `app_root` to `APP_ICON`, the theme
+`brandLogoUrl`, and the theme `brandLogoHref` config values. The frontend
+already prepends `STATIC_ASSETS_PREFIX` / `APPLICATION_ROOT` to relative paths
+via `ensureStaticPrefix()` and `ensureAppRoot()`, so the backend mutation
+caused requests like
+`/dashboards/dashboards/static/assets/images/superset-logo-horiz.png`
+to 404. The backend mutation has been removed; `STATIC_ASSETS_PREFIX` and
+`APPLICATION_ROOT` are still set from `app_root` when unset, which is what the
+frontend helpers consume.
+
+If you previously worked around the bug by setting `APP_ICON`,
+`THEME_DEFAULT["token"]["brandLogoUrl"]`, or
+`THEME_DEFAULT["token"]["brandLogoHref"]` to values that already included
+your app root, remove that workaround — store the raw `/static/...` and `/`
+values and the frontend will prefix them.
+
 ### Granular Export Controls
 
 A new feature flag `GRANULAR_EXPORT_CONTROLS` introduces three fine-grained permissions that replace the legacy `can_csv` permission:

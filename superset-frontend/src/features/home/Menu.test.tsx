@@ -767,6 +767,34 @@ test('brand path should be prefixed with app root in subdirectory deployment', a
   expect(brandLink).toHaveAttribute('href', '/superset/welcome/');
 });
 
+test('brand logo src is prefixed with staticAssetsPrefix exactly once in subdirectory deployment', async () => {
+  // Regression for https://github.com/apache/superset/issues/39432:
+  // ensure that brandLogoUrl from the theme is prefixed exactly once by
+  // ensureStaticPrefix() and not pre-prefixed by the backend (which would
+  // cause /dashboards/dashboards/static/...).
+  staticAssetsPrefixMock.mockReturnValue('/dashboards');
+  applicationRootMock.mockReturnValue('/dashboards');
+  useThemeMock.mockReturnValue({
+    ...CoreTheme.supersetTheme,
+    brandLogoUrl: '/static/assets/images/superset-logo-horiz.png',
+    brandLogoAlt: 'Apache Superset',
+  });
+  useSelectorMock.mockReturnValue({ roles: user.roles });
+
+  render(<Menu {...mockedProps} />, {
+    useRedux: true,
+    useQueryParams: true,
+    useRouter: true,
+    useTheme: true,
+  });
+
+  const image = await screen.findByAltText('Apache Superset');
+  expect(image).toHaveAttribute(
+    'src',
+    '/dashboards/static/assets/images/superset-logo-horiz.png',
+  );
+});
+
 test('brand link falls back to brand.path when theme brandLogoUrl is absent', async () => {
   // useThemeMock default returns supersetTheme with brandLogoUrl undefined (falsy)
   applicationRootMock.mockReturnValue('/superset');

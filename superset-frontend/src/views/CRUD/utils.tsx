@@ -327,6 +327,7 @@ export function handleChartDelete(
   refreshData: (arg0?: FetchDataConfig | null) => void,
   chartFilter?: string,
   userId?: string | number,
+  getData?: (tab: TableTab) => void,
 ) {
   const filters = {
     pageIndex: 0,
@@ -345,11 +346,13 @@ export function handleChartDelete(
       },
     ],
   };
-  SupersetClient.delete({
+  return SupersetClient.delete({
     endpoint: `/api/v1/chart/${id}`,
   }).then(
     () => {
-      if (chartFilter === 'Mine') refreshData(filters);
+      if (chartFilter === TableTab.Mine) refreshData(filters);
+      else if (chartFilter === TableTab.Other && getData)
+        getData(TableTab.Other);
       else refreshData();
       addSuccessToast(t('Deleted: %s', sliceName));
     },

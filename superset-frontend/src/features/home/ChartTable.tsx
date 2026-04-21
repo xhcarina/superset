@@ -237,6 +237,7 @@ function ChartTable({
               favoriteStatus={favoriteStatus[e.id]}
               saveFavoriteStatus={saveFavoriteStatus}
               handleBulkChartExport={handleBulkChartExport}
+              getData={getData}
             />
           ))}
         </CardContainer>

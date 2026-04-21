@@ -22,7 +22,7 @@ import {
   userEvent,
   waitFor,
 } from 'spec/helpers/testing-library';
-import { VizType } from '@superset-ui/core';
+import { SupersetClient, VizType } from '@superset-ui/core';
 import fetchMock from 'fetch-mock';
 import { act } from 'react-dom/test-utils';
 import handleResourceExport from 'src/utils/export';
@@ -58,7 +58,13 @@ fetchMock.get(chartsEndpoint, {
 });
 
 fetchMock.get(chartsInfoEndpoint, {
-  permissions: ['can_add', 'can_edit', 'can_delete', 'can_export'],
+  permissions: [
+    'can_add',
+    'can_edit',
+    'can_delete',
+    'can_export',
+    'can_write',
+  ],
 });
 
 fetchMock.get(chartFavoriteStatusEndpoint, {
@@ -177,4 +183,48 @@ test('handles chart export with correct ID and shows spinner', async () => {
     },
     { timeout: 3000 },
   );
+});
+
+test('refetches chart list after deleting a chart on the Other tab', async () => {
+  // Previous tests may have persisted a different active tab via localStorage.
+  localStorage.clear();
+
+  const deleteSpy = jest
+    .spyOn(SupersetClient, 'delete')
+    .mockResolvedValue({ json: {}, response: new Response() } as never);
+
+  await renderChartTable(otherTabProps);
+
+  expect(screen.getAllByText(/cool chart/i)).toHaveLength(3);
+  const preDeleteListCalls =
+    fetchMock.callHistory.calls(chartsEndpoint).length;
+
+  const moreButtons = screen.getAllByRole('img', { name: /more/i });
+  await userEvent.click(moreButtons[0]);
+
+  await waitFor(() => {
+    expect(screen.getByText('Delete')).toBeInTheDocument();
+  });
+  await userEvent.click(screen.getByText('Delete'));
+
+  await waitFor(() => {
+    expect(screen.getByTestId('modal-confirm-button')).toBeInTheDocument();
+    expect(screen.getByTestId('delete-modal-input')).toBeInTheDocument();
+  });
+  await userEvent.type(screen.getByTestId('delete-modal-input'), 'DELETE');
+  await waitFor(() => {
+    expect(screen.getByTestId('modal-confirm-button')).toBeEnabled();
+  });
+  await userEvent.click(screen.getByTestId('modal-confirm-button'));
+
+  await waitFor(() => {
+    expect(deleteSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: '/api/v1/chart/0' }),
+    );
+    expect(
+      fetchMock.callHistory.calls(chartsEndpoint).length,
+    ).toBeGreaterThan(preDeleteListCalls);
+  });
+
+  deleteSpy.mockRestore();
 });

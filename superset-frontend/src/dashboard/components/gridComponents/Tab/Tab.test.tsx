@@ -114,10 +114,15 @@ jest.mock('src/dashboard/components/dnd/DragDroppable', () => ({
 jest.mock('src/dashboard/actions/dashboardState', () => ({
   ...jest.requireActual('src/dashboard/actions/dashboardState'),
   setEditMode: jest.fn(() => ({
-    type: 'SET_EDIT_MODE',
+    type: 'MOCK_SET_EDIT_MODE',
   })),
+  // Return a type the dashboardState reducer does not handle so the mock never
+  // triggers the real ON_REFRESH reducer (which would update lastRefreshTime
+  // and cascade back into the Tab lazy-refresh effect). The real onRefresh
+  // skips dispatching ON_REFRESH when isLazyLoad is true, and Tab always calls
+  // it with isLazyLoad=true, so this mirrors production behavior.
   onRefresh: jest.fn(() => ({
-    type: 'ON_REFRESH',
+    type: 'MOCK_ON_REFRESH',
   })),
 }));
 
